@@ -1,3 +1,5 @@
+// vim: syntax=c:autoindent:sw=2:ts=2
+
 #ifndef MQTT_CONFIG
 #define MQTT_CONFIG
 const char* ssid = "Please specify your WIFI SSID";
@@ -13,4 +15,5 @@ const char* mqtt_password = "Please specify password";
 const char* mqtt_id = "OTESP";
 const char* mqtt_topic_update = "thermostat/update";
 const char* mqtt_topic_sp = "thermostat/sp";
+const char* mqtt_topic_pv = "thermostat/pv";
 #endif  // MQTT_CONFIG

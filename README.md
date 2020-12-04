@@ -14,3 +14,5 @@ Compared to the original code the following changes can be observed:
    - Move of MQTT configuration to separate file
    - Fixed reconnection to MQTT server
      If the MQTT server could not be reached, the thermostat stopped talking to the boiler. This could cause the boiler to start heating indefinitely.
+   - External temperature
+     The thermostat can reside in a location different from where you want to control the temperature. In such a situation, the thermostat's temperature sensor is inideal for controlling the environment. To remedy this issue, the thermostat now accepts external temperature readings. If these aren't provided, for a certain time or not at all, the thermostat falls back to using its own temperature sensor.

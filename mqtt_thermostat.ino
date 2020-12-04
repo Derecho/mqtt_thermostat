@@ -9,6 +9,7 @@
 
 const unsigned long OT_INTERVAL = 1000;  // 1 second (max allowed per spec)
 const unsigned long RECONNECT_INTERVAL = 5000;  // 5 seconds
+const unsigned long EXT_PV_TIMEOUT = 60000;  // 1 minute
 
 //OpenTherm input and output wires connected to 4 and 5 pins on the OpenTherm Shield
 const int inPin = 4;
@@ -29,10 +30,13 @@ pv = 0, //current temperature
 pv_last = 0, //prior temperature
 ierr = 0, //integral error
 dt = 0, //time between measurements
-op = 0; //PID controller output
+op = 0, //PID controller output
+ext_pv = 0; //optional external temperature
 unsigned long ts = 0, //timestamp main loop #1
 new_ts = 0, //timestamp main loop #2
-disconnected_ts = 0; //timestamp of last disconnect/reconnect
+disconnected_ts = 0, //timestamp of last disconnect/reconnect
+ext_pv_ts = 0; //timestamp of last external temperature
+bool pv_is_ext = false; //pv is set from ext_pv
 
 
 void ICACHE_RAM_ATTR handleInterrupt() {
@@ -40,7 +44,16 @@ void ICACHE_RAM_ATTR handleInterrupt() {
 }
 
 float getTemp() {
-  return sensors.getTempCByIndex(0);
+  // If ext_pv was ever set, and it hasn't been too long ago, use that
+  if ((ext_pv_ts != 0) && (millis() - ext_pv_ts < EXT_PV_TIMEOUT)) {
+    pv_is_ext = true;
+    return ext_pv;
+  }
+  // Otherwise, use internal temperature reading
+  else {
+    pv_is_ext = false;
+    return sensors.getTempCByIndex(0);
+  }
 }
 
 float pid(float sp, float pv, float pv_last, float& ierr, float dt) {
@@ -113,7 +126,7 @@ void setup(void) {
 
   //Init MQTT Client
   client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback);
+  client.setCallback(mqtt_callback);
 }
 
 void publish_status() {
@@ -122,6 +135,8 @@ void publish_status() {
   data += pv;
   data += "\", \"sp\": \"";
   data += sp;
+  data += "\", \"ext\": \"";
+  data += pv_is_ext;
   data += "\"}";
   Serial.println(data);
   char data_char[64];
@@ -129,7 +144,7 @@ void publish_status() {
   client.publish(mqtt_topic_update, data_char);
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
+void mqtt_callback(char* topic, byte* payload, unsigned int length) {
   // MQTT message received
 
   if(strcmp(topic, mqtt_topic_sp) == 0)
@@ -141,6 +156,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
     Serial.println("sp=" + str);  
     sp = str.toFloat();
+  }
+  else if(strcmp(topic, mqtt_topic_pv) == 0)
+  {
+    // New external temperature reading received
+    String str = String();    
+    for (int i = 0; i < length; i++) {
+      str += (char)payload[i];
+    }
+    Serial.println("ext_pv=" + str);  
+    ext_pv = str.toFloat();
+    ext_pv_ts = millis();
   }
 }
 
@@ -157,6 +183,7 @@ void reconnect() {
       publish_status();
       // ... and resubscribe
       client.subscribe(mqtt_topic_sp);
+      client.subscribe(mqtt_topic_pv);
     } else {
       Serial.print("failed, rc=");
       Serial.println(client.state());
