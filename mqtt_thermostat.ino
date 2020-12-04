@@ -1,3 +1,5 @@
+// vim: syntax=c:autoindent:sw=2:ts=2
+
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <OneWire.h>
@@ -6,6 +8,9 @@
 #include <OpenTherm.h>
 
 #include "mqtt_config.h"
+
+const unsigned long OT_INTERVAL = 1000;  // 1 second
+const unsigned long RECONNECT_INTERVAL = 5000;  // 5 seconds
 
 //OpenTherm input and output wires connected to 4 and 5 pins on the OpenTherm Shield
 const int inPin = 4;
@@ -27,7 +32,7 @@ pv_last = 0, //prior temperature
 ierr = 0, //integral error
 dt = 0, //time between measurements
 op = 0; //PID controller output
-unsigned long ts = 0, new_ts = 0; //timestamp
+unsigned long ts = 0, new_ts = 0, disconnected_ts = 0; //timestamp
 
 
 void ICACHE_RAM_ATTR handleInterrupt() {
@@ -135,7 +140,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void reconnect() {  
-  while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
 #ifdef MQTT_AUTH
@@ -150,17 +154,13 @@ void reconnect() {
       client.subscribe(mqtt_topic_sp);
     } else {
       Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }    
-  }
+      Serial.println(client.state());
+    }
 }
 
 void loop(void) { 
   new_ts = millis();
-  if (new_ts - ts > 1000) {   
+  if (new_ts - ts > OT_INTERVAL) {   
     //Set/Get Boiler Status
     bool enableCentralHeating = true;
     bool enableHotWater = true;
@@ -172,7 +172,7 @@ void loop(void) {
     }   
 
     pv = getTemp();
-    dt = (new_ts - ts) / 1000.0;
+    dt = (new_ts - ts) / (float)OT_INTERVAL;
     ts = new_ts;
     if (responseStatus == OpenThermResponseStatus::SUCCESS) {
       op = pid(sp, pv, pv_last, ierr, dt);
@@ -188,7 +188,15 @@ void loop(void) {
   
   //MQTT Loop
   if (!client.connected()) {
-    reconnect();
+    if (disconnected_ts == 0) {
+      // Just got disconnected, save timestamp
+      disconnected_ts = new_ts;
+    }
+    else if(new_ts - disconnected_ts > RECONNECT_INTERVAL) {
+      // RECONNECT_INTERVAL passed since disconnection, try to reconnect
+      reconnect();
+      disconnected_ts = 0;  // Reset after connection attempt
+    }
   }
   client.loop();
 }
