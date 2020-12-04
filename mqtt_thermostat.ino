@@ -42,7 +42,7 @@ op = 0; //PID controller output
 unsigned long ts = 0, new_ts = 0; //timestamp
 
 
-void handleInterrupt() {
+void ICACHE_RAM_ATTR handleInterrupt() {
   ot.handleInterrupt();
 }
 
@@ -183,7 +183,7 @@ void loop(void) {
       Serial.println("Error: Invalid boiler response " + String(response, HEX));
     }   
 
-    pv = sensors.getTempCByIndex(0);
+    pv = getTemp();
     dt = (new_ts - ts) / 1000.0;
     ts = new_ts;
     if (responseStatus == OpenThermResponseStatus::SUCCESS) {
