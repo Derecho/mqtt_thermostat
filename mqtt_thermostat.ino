@@ -4,12 +4,10 @@
 #include <PubSubClient.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
-
 #include <OpenTherm.h>
+#include "mqtt_config.h"  // See example, modify according to own needs
 
-#include "mqtt_config.h"
-
-const unsigned long OT_INTERVAL = 1000;  // 1 second
+const unsigned long OT_INTERVAL = 1000;  // 1 second (max allowed per spec)
 const unsigned long RECONNECT_INTERVAL = 5000;  // 5 seconds
 
 //OpenTherm input and output wires connected to 4 and 5 pins on the OpenTherm Shield
@@ -32,7 +30,9 @@ pv_last = 0, //prior temperature
 ierr = 0, //integral error
 dt = 0, //time between measurements
 op = 0; //PID controller output
-unsigned long ts = 0, new_ts = 0, disconnected_ts = 0; //timestamp
+unsigned long ts = 0, //timestamp main loop #1
+new_ts = 0, //timestamp main loop #2
+disconnected_ts = 0; //timestamp of last disconnect/reconnect
 
 
 void ICACHE_RAM_ATTR handleInterrupt() {
@@ -116,7 +116,7 @@ void setup(void) {
   client.setCallback(callback);
 }
 
-void publish_temperature() {
+void publish_status() {
   String data;
   data += "{\"pv\": \"";
   data += pv;
@@ -130,13 +130,18 @@ void publish_temperature() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  if(strcmp(topic, mqtt_topic_sp) != 0) return;
-  String str = String();    
-  for (int i = 0; i < length; i++) {
-    str += (char)payload[i];
+  // MQTT message received
+
+  if(strcmp(topic, mqtt_topic_sp) == 0)
+  {
+    // New setpoint received
+    String str = String();    
+    for (int i = 0; i < length; i++) {
+      str += (char)payload[i];
+    }
+    Serial.println("sp=" + str);  
+    sp = str.toFloat();
   }
-  Serial.println("sp=" + str);  
-  sp = str.toFloat();
 }
 
 void reconnect() {  
@@ -149,7 +154,7 @@ void reconnect() {
 #endif
       Serial.println("connected");
       // Once connected, publish an announcement...
-      publish_temperature();
+      publish_status();
       // ... and resubscribe
       client.subscribe(mqtt_topic_sp);
     } else {
@@ -183,7 +188,7 @@ void loop(void) {
     
     sensors.requestTemperatures(); //async temperature request
     
-    publish_temperature();
+    publish_status();
   }
   
   //MQTT Loop
@@ -192,7 +197,7 @@ void loop(void) {
       // Just got disconnected, save timestamp
       disconnected_ts = new_ts;
     }
-    else if(new_ts - disconnected_ts > RECONNECT_INTERVAL) {
+    else if (new_ts - disconnected_ts > RECONNECT_INTERVAL) {
       // RECONNECT_INTERVAL passed since disconnection, try to reconnect
       reconnect();
       disconnected_ts = 0;  // Reset after connection attempt
