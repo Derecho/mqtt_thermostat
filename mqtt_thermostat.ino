@@ -16,8 +16,15 @@ const char* ssid = "Please specify your WIFI SSID";
 const char* password = "Please specify your WIFI password";
 const char* mqtt_server = "Please specify MQTT server";
 const int   mqtt_port = 00000;
+// Comment below define if not using authentication on your MQTT broker
+#define MQTT_AUTH
+#ifdef MQTT_AUTH
 const char* mqtt_user = "Please specify user";
 const char* mqtt_password = "Please specify password";
+#endif MQTT_AUTH
+const char* mqtt_id = "OTESP";
+const char* mqtt_topic_update = "thermostat/update";
+const char* mqtt_topic_sp = "thermostat/sp";
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
@@ -117,13 +124,20 @@ void setup(void) {
 }
 
 void publish_temperature() {
-  Serial.println("t=" + String(pv));    
-  String(pv).toCharArray(buf, 10);
-  client.publish("pv", buf);  
+  String data;
+  data += "{\"pv\": \"";
+  data += pv;
+  data += "\", \"sp\": \"";
+  data += sp;
+  data += "\"}";
+  Serial.println(data);
+  char data_char[64];
+  data.toCharArray(data_char, sizeof(data_char));
+  client.publish(mqtt_topic_update, data_char);
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  if(strcmp(topic, "sp") != 0) return;
+  if(strcmp(topic, mqtt_topic_sp) != 0) return;
   String str = String();    
   for (int i = 0; i < length; i++) {
     str += (char)payload[i];
@@ -136,12 +150,16 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (client.connect("ESP8266Client", mqtt_user, mqtt_password)) {
+#ifdef MQTT_AUTH
+    if (client.connect(mqtt_id, mqtt_user, mqtt_password)) {
+#else
+    if (client.connect(mqtt_id)) {
+#endif
       Serial.println("connected");
       // Once connected, publish an announcement...
       publish_temperature();
       // ... and resubscribe
-      client.subscribe("sp");
+      client.subscribe(mqtt_topic_sp);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
