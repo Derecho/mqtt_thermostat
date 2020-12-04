@@ -5,26 +5,14 @@
 
 #include <OpenTherm.h>
 
+#include "mqtt_config.h"
+
 //OpenTherm input and output wires connected to 4 and 5 pins on the OpenTherm Shield
 const int inPin = 4;
 const int outPin = 5;
 
 //Data wire is connected to 14 pin on the OpenTherm Shield
 #define ONE_WIRE_BUS 14
-
-const char* ssid = "Please specify your WIFI SSID";
-const char* password = "Please specify your WIFI password";
-const char* mqtt_server = "Please specify MQTT server";
-const int   mqtt_port = 00000;
-// Comment below define if not using authentication on your MQTT broker
-#define MQTT_AUTH
-#ifdef MQTT_AUTH
-const char* mqtt_user = "Please specify user";
-const char* mqtt_password = "Please specify password";
-#endif MQTT_AUTH
-const char* mqtt_id = "OTESP";
-const char* mqtt_topic_update = "thermostat/update";
-const char* mqtt_topic_sp = "thermostat/sp";
 
 OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
